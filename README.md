@@ -292,7 +292,3 @@ npm run test:cov
 ```
 
 ---
-
-## License
-
-MIT
