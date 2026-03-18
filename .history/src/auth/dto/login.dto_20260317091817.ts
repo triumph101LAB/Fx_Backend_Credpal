@@ -1,5 +1,0 @@
-impot
-export class LoginDto{
-
-
-}

@@ -1,5 +1,0 @@
-import
-export class LoginDto{
-
-
-}

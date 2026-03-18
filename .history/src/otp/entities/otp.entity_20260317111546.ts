@@ -1,1 +1,0 @@
-import { Entity,PrimaryGeneratedColumn,CreateDateColumn,Man } from "typeorm";
