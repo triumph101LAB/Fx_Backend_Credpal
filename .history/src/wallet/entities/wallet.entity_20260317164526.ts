@@ -1,0 +1,3 @@
+import { Entity,
+    Prima
+ } from "typeorm";

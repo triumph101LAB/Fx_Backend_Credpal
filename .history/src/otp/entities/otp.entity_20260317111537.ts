@@ -1,0 +1,1 @@
+import { Entity,Pir } from "typeorm";

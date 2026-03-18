@@ -1,0 +1,25 @@
+import { Controller,Post,Body,HttpCode } from "@nestjs/common";
+import{ApiTags} from '@nestjs/swagger';
+import { AuthService } from "./auth.service";
+import { verify } from "crypto";
+
+
+@ApiTags('Auth')
+@Controller('auth')
+
+export class AuthController {
+constructor (private readonly authService:AuthService){}
+
+@Post('/register')
+register(@Body() dto:RegisterDto){
+return this.authService.register(dto)
+
+}
+@Post('verify')
+@HttpCode(200)
+verify(@Body() dto:VerifyOtp){
+
+}
+
+
+}
