@@ -14,7 +14,7 @@ import { WalletBalance } from "./entities/wallet.entity";
     ],
     providers:[WalletService],
     controllers:[WalletController],
-    exports:[]
+    exports:[WalletService]
 })
 
 export class WalletModule{}

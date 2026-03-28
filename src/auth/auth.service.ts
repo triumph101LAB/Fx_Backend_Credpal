@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { UsersService } from 'src/users/users.service';
 import { MailService } from 'src/mail/mail.services';
+import { WalletService } from 'src/wallet/wallet.service';
 import { Otp } from 'src/otp/entities/otp.entity';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -18,6 +19,7 @@ export class AuthService{
         private usersService:UsersService,
         private jwtService:JwtService,
         private mailService:MailService,
+        private walletService: WalletService,
         @InjectRepository(Otp)
         private readonly otpRepo: Repository<Otp>
     ){}
@@ -68,6 +70,9 @@ async verifyOtp(dto:VerifyOtpDto){
      
     await this.otpRepo.update(otp.id, {isUsed:true})
     await this.usersService.markVerified(user.id);
+
+    // PDF requirement: "Each user has a wallet with an initial balance."
+    await this.walletService.initializeWallet(user.id);
     
     const token = this.jwtService.sign({sub:user.id, email:user.email})
     return{message:'Email has been Verified', access_token:token}

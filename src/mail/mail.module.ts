@@ -4,7 +4,7 @@ import { MailService } from './mail.services';
 import { MailProcessor } from './mail.processor';
 
 @Module({
-  imports: [
+  imports: [ 
     BullModule.registerQueue({
       name: 'mail',
       redis: {
