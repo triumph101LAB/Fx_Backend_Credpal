@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transaction } from './entities/transaction.entities';
+import { User } from 'src/users/entities/users.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -10,7 +11,7 @@ export class TransactionsService {
     private readonly txRepo: Repository<Transaction>,
   ) {}
 
-  async getHistory(userId: string, page = 1, limit = 20) {
+  async getHistory(user: User, page = 1, limit = 20) {
     // Cap limit to prevent abuse — nobody should fetch 10,000 records
     const safeLimit = Math.min(limit, 100);
 
@@ -29,7 +30,7 @@ export class TransactionsService {
         'tx.note',
         'tx.createdAt',
       ])
-      .where('tx.userId = :userId', { userId })
+      .where('tx.userId = :userId', { userId: user.id })
       .orderBy('tx.createdAt', 'DESC')
       .skip((page - 1) * safeLimit)
       .take(safeLimit)

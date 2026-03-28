@@ -14,7 +14,10 @@ import { FundwalletDto } from './dto/fund-wallet.dto';
 import { ConvertDto } from './dto/convert.dto';
 import { TransactionType } from 'src/commnon/enums/transaction-type.enum';
 import { TransactionStatus } from 'src/commnon/enums/transactions-status.enum';
+import { Currency } from 'src/commnon/enums/currency.enum';
 import { v4 as uuidv4 } from 'uuid';
+
+import { User } from 'src/users/entities/users.entity';
 
 @Injectable()
 export class WalletService {
@@ -27,20 +30,36 @@ export class WalletService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async getBalances(userId: string) {
-    // Let PostgreSQL cast the decimal — no JS mapping needed
+  async initializeWallet(userId: string) {
+    // Keep this as userId for internal/system calls (like during verification)
+    const existing = await this.balanceRepo.findOne({
+      where: { userId, currency: Currency.NGN },
+    });
+
+    if (!existing) {
+      await this.balanceRepo.save(
+        this.balanceRepo.create({
+          userId,
+          currency: Currency.NGN,
+          balance: '0',
+        }),
+      );
+    }
+  }
+
+  async getBalances(user: User) {
     return this.balanceRepo
       .createQueryBuilder('wb')
       .select('wb.currency', 'currency')
       .addSelect('CAST(wb.balance AS FLOAT)', 'balance')
-      .where('wb.userId = :userId', { userId })
+      .where('wb.userId = :userId', { userId: user.id })
       .getRawMany();
   }
 
-  async fundWallet(userId: string, dto: FundwalletDto) {
+  async fundWallet(user: User, dto: FundwalletDto) {
     const reference = dto.reference ?? uuidv4();
 
-    const existing = await this.txRepo.findOne({ where: { reference, userId } });
+    const existing = await this.txRepo.findOne({ where: { reference, userId: user.id } });
     if (existing?.status === TransactionStatus.SUCCESS) {
       return { message: 'Already processed', transaction: existing };
     }
@@ -51,13 +70,13 @@ export class WalletService {
 
     try {
       let balance = await queryRunner.manager.findOne(WalletBalance, {
-        where: { userId, currency: dto.currency },
+        where: { userId: user.id, currency: dto.currency },
         lock: { mode: 'pessimistic_write' },
       });
 
       if (!balance) {
         balance = queryRunner.manager.create(WalletBalance, {
-          userId,
+          userId: user.id,
           currency: dto.currency,
           balance: '0',
         });
@@ -70,13 +89,13 @@ export class WalletService {
         .update(WalletBalance)
         .set({ balance: () => `CAST(balance AS DECIMAL(20,8)) + ${dto.amount}` })
         .where('userId = :userId AND currency = :currency', {
-          userId,
+          userId: user.id,
           currency: dto.currency,
         })
         .execute();
 
       const tx = queryRunner.manager.create(Transaction, {
-        userId,
+        userId: user.id,
         type: TransactionType.FUND,
         toCurrency: dto.currency,
         toAmount: dto.amount.toFixed(8),
@@ -88,12 +107,12 @@ export class WalletService {
 
       await queryRunner.commitTransaction();
 
-      // Fetch updated balance from DB instead of computing in JS
+      // Fetch updated balance from DB
       const updated = await this.balanceRepo
         .createQueryBuilder('wb')
         .select('CAST(wb.balance AS FLOAT)', 'balance')
         .where('wb.userId = :userId AND wb.currency = :currency', {
-          userId,
+          userId: user.id,
           currency: dto.currency,
         })
         .getRawOne();
@@ -113,7 +132,7 @@ export class WalletService {
   }
 
   async convert(
-    userId: string,
+    user: User,
     dto: ConvertDto,
     type: TransactionType = TransactionType.CONVERT,
   ) {
@@ -121,9 +140,13 @@ export class WalletService {
       throw new BadRequestException('Cannot convert to same currency');
     }
 
+    if (dto.fromCurrency !== Currency.NGN && dto.toCurrency !== Currency.NGN) {
+      throw new BadRequestException('One of the currencies must be Naira (NGN)');
+    }
+
     const reference = dto.reference ?? uuidv4();
 
-    const existing = await this.txRepo.findOne({ where: { reference, userId } });
+    const existing = await this.txRepo.findOne({ where: { reference, userId: user.id } });
     if (existing?.status === TransactionStatus.SUCCESS) {
       return { message: 'Already processed', transaction: existing };
     }
@@ -137,7 +160,7 @@ export class WalletService {
 
     try {
       const source = await queryRunner.manager.findOne(WalletBalance, {
-        where: { userId, currency: dto.fromCurrency },
+        where: { userId: user.id, currency: dto.fromCurrency },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -146,25 +169,24 @@ export class WalletService {
         throw new BadRequestException('Insufficient balance');
       }
 
-      // PostgreSQL handles arithmetic
       await queryRunner.manager
         .createQueryBuilder()
         .update(WalletBalance)
         .set({ balance: () => `CAST(balance AS DECIMAL(20,8)) - ${dto.amount}` })
         .where('userId = :userId AND currency = :currency', {
-          userId,
+          userId: user.id,
           currency: dto.fromCurrency,
         })
         .execute();
 
       let target = await queryRunner.manager.findOne(WalletBalance, {
-        where: { userId, currency: dto.toCurrency },
+        where: { userId: user.id, currency: dto.toCurrency },
         lock: { mode: 'pessimistic_write' },
       });
 
       if (!target) {
         target = queryRunner.manager.create(WalletBalance, {
-          userId,
+          userId: user.id,
           currency: dto.toCurrency,
           balance: '0',
         });
@@ -176,13 +198,13 @@ export class WalletService {
         .update(WalletBalance)
         .set({ balance: () => `CAST(balance AS DECIMAL(20,8)) + ${toAmount}` })
         .where('userId = :userId AND currency = :currency', {
-          userId,
+          userId: user.id,
           currency: dto.toCurrency,
         })
         .execute();
 
       const tx = queryRunner.manager.create(Transaction, {
-        userId,
+        userId: user.id,
         type,
         fromCurrency: dto.fromCurrency,
         toCurrency: dto.toCurrency,
